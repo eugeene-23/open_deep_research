@@ -61,6 +61,7 @@ node_modules/
 
 # LangGraph specific
 .langgraph/
+langgraph.local.json
 
 # Temporary files
 tmp/

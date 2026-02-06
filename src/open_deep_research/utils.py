@@ -70,10 +70,10 @@ async def tavily_search(
     # Step 2: Deduplicate results by URL to avoid processing the same content multiple times
     unique_results = {}
     for response in search_results:
-        for result in response['results']:
-            url = result['url']
+        for result in response["results"]:
+            url = result["url"]
             if url not in unique_results:
-                unique_results[url] = {**result, "query": response['query']}
+                unique_results[url] = {**result, "query": response.get("query")}
     
     # Step 3: Set up the summarization model with configuration
     configurable = Configuration.from_runnable_config(config)
@@ -83,12 +83,15 @@ async def tavily_search(
     
     # Initialize summarization model with retry logic
     model_api_key = get_api_key_for_model(configurable.summarization_model, config)
+    structured_output_kwargs = {}
+    if configurable.summarization_model.lower().startswith("openai:"):
+        structured_output_kwargs["method"] = "function_calling"
     summarization_model = init_chat_model(
         model=configurable.summarization_model,
         max_tokens=configurable.summarization_model_max_tokens,
         api_key=model_api_key,
         tags=["langsmith:nostream"]
-    ).with_structured_output(Summary).with_retry(
+    ).with_structured_output(Summary, **structured_output_kwargs).with_retry(
         stop_after_attempt=configurable.max_structured_output_retries
     )
     
@@ -154,6 +157,65 @@ async def tavily_search_async(
     Returns:
         List of search result dictionaries from Tavily API
     """
+    configurable = Configuration.from_runnable_config(config)
+    tavily_base_url = (configurable.tavily_base_url or "").strip().rstrip("/")
+
+    if tavily_base_url:
+        api_key = get_tavily_api_key(config)
+        if not api_key:
+            raise ToolException(
+                "Missing Tavily API key. Set TAVILY_API_KEY (or provide it via config when GET_API_KEYS_FROM_CONFIG=true)."
+            )
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+
+        proxy = None
+        if tavily_base_url.startswith("https://"):
+            proxy = (
+                os.getenv("TAVILY_HTTPS_PROXY")
+                or os.getenv("HTTPS_PROXY")
+                or os.getenv("https_proxy")
+            )
+        elif tavily_base_url.startswith("http://"):
+            proxy = (
+                os.getenv("TAVILY_HTTP_PROXY")
+                or os.getenv("HTTP_PROXY")
+                or os.getenv("http_proxy")
+            )
+
+        timeout = aiohttp.ClientTimeout(total=120)
+
+        async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+            async def _search_one(query: str) -> dict:
+                data = {
+                    "query": query,
+                    "search_depth": "basic",
+                    "topic": topic,
+                    "days": 7,
+                    "max_results": max_results,
+                    "include_raw_content": include_raw_content,
+                }
+                async with session.post(
+                    f"{tavily_base_url}/search",
+                    json=data,
+                    headers=headers,
+                    proxy=proxy,
+                ) as response:
+                    if response.status != 200:
+                        detail = await response.text()
+                        raise ToolException(
+                            f"Tavily request failed (status={response.status}): {detail}"
+                        )
+                    payload = await response.json()
+                    if isinstance(payload, dict) and "query" not in payload:
+                        payload["query"] = query
+                    return payload
+
+            return await asyncio.gather(*[_search_one(q) for q in search_queries])
+
     # Initialize the Tavily client with API key from config
     tavily_client = AsyncTavilyClient(api_key=get_tavily_api_key(config))
     

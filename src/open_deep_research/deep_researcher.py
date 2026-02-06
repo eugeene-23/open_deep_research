@@ -86,9 +86,12 @@ async def clarify_with_user(state: AgentState, config: RunnableConfig) -> Comman
     }
     
     # Configure model with structured output and retry logic
+    structured_output_kwargs = {}
+    if configurable.research_model.lower().startswith("openai:"):
+        structured_output_kwargs["method"] = "function_calling"
     clarification_model = (
         configurable_model
-        .with_structured_output(ClarifyWithUser)
+        .with_structured_output(ClarifyWithUser, **structured_output_kwargs)
         .with_retry(stop_after_attempt=configurable.max_structured_output_retries)
         .with_config(model_config)
     )
@@ -139,9 +142,12 @@ async def write_research_brief(state: AgentState, config: RunnableConfig) -> Com
     }
     
     # Configure model for structured research question generation
+    structured_output_kwargs = {}
+    if configurable.research_model.lower().startswith("openai:"):
+        structured_output_kwargs["method"] = "function_calling"
     research_model = (
         configurable_model
-        .with_structured_output(ResearchQuestion)
+        .with_structured_output(ResearchQuestion, **structured_output_kwargs)
         .with_retry(stop_after_attempt=configurable.max_structured_output_retries)
         .with_config(research_model_config)
     )

@@ -44,7 +44,7 @@ cp .env.example .env
 
 ```bash
 # Install dependencies and start the LangGraph server
-uvx --refresh --from "langgraph-cli[inmem]" --with-editable . --python 3.11 langgraph dev --allow-blocking
+uvx --refresh --from "langgraph-cli[inmem]" --with-editable . --python 3.11 langgraph dev --config langgraph.local.json --allow-blocking
 ```
 
 This will open the LangGraph Studio UI in your browser.
@@ -75,6 +75,8 @@ Open Deep Research supports a wide range of LLM providers via the [init_chat_mod
 #### Search API :mag:
 
 Open Deep Research supports a wide range of search tools. By default it uses the [Tavily](https://www.tavily.com/) search API. Has full MCP compatibility and work native web search for Anthropic and OpenAI. See the `search_api` and `mcp_config` fields in the [configuration.py](https://github.com/langchain-ai/open_deep_research/blob/main/src/open_deep_research/configuration.py) file for more details. This can be accessed via the LangGraph Studio UI. 
+
+> Optional: set `TAVILY_BASE_URL` to override the Tavily API endpoint (e.g., CDN/reverse proxy). Default is `https://api.tavily.com`.
 
 #### Other 
 

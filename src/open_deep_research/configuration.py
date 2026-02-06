@@ -91,6 +91,16 @@ class Configuration(BaseModel):
             }
         }
     )
+    tavily_base_url: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "text",
+                "description": "Optional: Override Tavily API base URL (e.g., CDN/reverse proxy). Default is https://api.tavily.com"
+            }
+        },
+    )
     max_researcher_iterations: int = Field(
         default=6,
         metadata={
