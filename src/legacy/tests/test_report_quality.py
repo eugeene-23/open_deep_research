@@ -1,27 +1,37 @@
 #!/usr/bin/env python
+"""Legacy LangSmith-backed report quality integration test."""
 
+import asyncio
 import os
 import uuid
-import pytest
-import asyncio
-from pydantic import BaseModel, Field
-from langchain.chat_models import init_chat_model
-from langsmith import testing as t
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.markdown import Markdown
 
+import pytest
+from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
+from langsmith import testing as t
+from pydantic import BaseModel, Field
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.table import Table
 
 # Import the report generation agents
 from legacy.graph import builder
 from legacy.multi_agent import supervisor_builder
+from open_deep_research.pytest_support import (
+    get_optional_pytest_option,
+    get_report_quality_test_skip_reason,
+)
 
 # Initialize rich console with force_terminal to ensure output even when pytest captures stdout
 console = Console(force_terminal=True, width=120)
+
+MODULE_SKIP_REASON = None
+if os.environ.get("RUN_LANGSMITH_INTEGRATION_TESTS", "").lower() != "true":
+    MODULE_SKIP_REASON = "Set RUN_LANGSMITH_INTEGRATION_TESTS=true to run LangSmith-backed integration tests."
+
+pytestmark = pytest.mark.skipif(MODULE_SKIP_REASON is not None, reason=MODULE_SKIP_REASON or "")
 
 class CriteriaGrade(BaseModel):
     """Score the response against specific criteria."""
@@ -83,17 +93,17 @@ Evaluation Instructions:
 @pytest.fixture
 def research_agent(request):
     """Get the research agent type from command line or environment variable."""
-    return request.config.getoption("--research-agent") or os.environ.get("RESEARCH_AGENT", "multi_agent")
+    return get_optional_pytest_option(request, "--research-agent") or os.environ.get("RESEARCH_AGENT", "multi_agent")
 
 @pytest.fixture
 def search_api(request):
     """Get the search API from command line or environment variable."""
-    return request.config.getoption("--search-api") or os.environ.get("SEARCH_API", "tavily")
+    return get_optional_pytest_option(request, "--search-api") or os.environ.get("SEARCH_API", "tavily")
 
 @pytest.fixture
 def eval_model(request):
     """Get the evaluation model from command line or environment variable."""
-    return request.config.getoption("--eval-model") or os.environ.get("EVAL_MODEL", "anthropic:claude-3-7-sonnet-latest")
+    return get_optional_pytest_option(request, "--eval-model") or os.environ.get("EVAL_MODEL", "anthropic:claude-3-7-sonnet-latest")
 
 @pytest.fixture
 def models(request, research_agent):
@@ -101,34 +111,34 @@ def models(request, research_agent):
     if research_agent == "multi_agent":
         return {
             "supervisor_model": (
-                request.config.getoption("--supervisor-model") or 
+                get_optional_pytest_option(request, "--supervisor-model") or
                 os.environ.get("SUPERVISOR_MODEL", "anthropic:claude-3-7-sonnet-latest")
             ),
             "researcher_model": (
-                request.config.getoption("--researcher-model") or 
+                get_optional_pytest_option(request, "--researcher-model") or
                 os.environ.get("RESEARCHER_MODEL", "anthropic:claude-3-5-sonnet-latest")
             ),
         }
     else:  # graph agent
         return {
             "planner_provider": (
-                request.config.getoption("--planner-provider") or 
+                get_optional_pytest_option(request, "--planner-provider") or
                 os.environ.get("PLANNER_PROVIDER", "anthropic")
             ),
             "planner_model": (
-                request.config.getoption("--planner-model") or 
+                get_optional_pytest_option(request, "--planner-model") or
                 os.environ.get("PLANNER_MODEL", "claude-3-7-sonnet-latest")
             ),
             "writer_provider": (
-                request.config.getoption("--writer-provider") or 
+                get_optional_pytest_option(request, "--writer-provider") or
                 os.environ.get("WRITER_PROVIDER", "anthropic")
             ),
             "writer_model": (
-                request.config.getoption("--writer-model") or 
+                get_optional_pytest_option(request, "--writer-model") or
                 os.environ.get("WRITER_MODEL", "claude-3-5-sonnet-latest")
             ),
             "max_search_depth": int(
-                request.config.getoption("--max-search-depth") or 
+                get_optional_pytest_option(request, "--max-search-depth") or
                 os.environ.get("MAX_SEARCH_DEPTH", "2")
             ),
         }
@@ -139,6 +149,15 @@ def models(request, research_agent):
 @pytest.mark.langsmith
 def test_response_criteria_evaluation(research_agent, search_api, models, eval_model):
     """Test if a report meets the specified quality criteria."""
+    skip_reason = get_report_quality_test_skip_reason(
+        research_agent=research_agent,
+        search_api=search_api,
+        models=models,
+        eval_model=eval_model,
+    )
+    if skip_reason:
+        pytest.skip(skip_reason)
+
     console.print(Panel.fit(
         f"[bold blue]Testing {research_agent} report generation with {search_api} search[/bold blue]",
         title="Test Configuration"
@@ -219,7 +238,7 @@ def test_response_criteria_evaluation(research_agent, search_api, models, eval_m
             # Run the graph until the interruption
             async for event in graph.astream({"topic":topic_query}, thread, stream_mode="updates"):
                 if '__interrupt__' in event:
-                    interrupt_value = event['__interrupt__'][0].value
+                    _ = event['__interrupt__'][0].value
 
             # Pass True to approve the report plan and proceed to write the report
             async for event in graph.astream(Command(resume=True), thread, stream_mode="updates"):
