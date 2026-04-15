@@ -83,6 +83,7 @@ async def tavily_search(
     
     # Initialize summarization model with retry logic
     model_api_key = get_api_key_for_model(configurable.summarization_model, config)
+    model_base_url = get_base_url_for_model(configurable.summarization_model, config)
     structured_output_kwargs = {}
     if configurable.summarization_model.lower().startswith("openai:"):
         structured_output_kwargs["method"] = "function_calling"
@@ -90,6 +91,7 @@ async def tavily_search(
         model=configurable.summarization_model,
         max_tokens=configurable.summarization_model_max_tokens,
         api_key=model_api_key,
+        base_url=model_base_url,
         tags=["langsmith:nostream"]
     ).with_structured_output(Summary, **structured_output_kwargs).with_retry(
         stop_after_attempt=configurable.max_structured_output_retries
@@ -954,17 +956,38 @@ def get_config_value(value):
 def get_api_key_for_model(model_name: str, config: RunnableConfig):
     """Get API key for a specific model from environment or config."""
     should_get_from_config = os.getenv("GET_API_KEYS_FROM_CONFIG", "false")
-    model_name = model_name.lower()
-    if should_get_from_config.lower() == "true":
-        api_keys = config.get("configurable", {}).get("apiKeys", {})
-        if not api_keys:
-            return None
+    model_name = (model_name or "").lower()
+    configurable = config.get("configurable", {}) if config else {}
+
+    def _provider_api_key(api_keys: dict[str, str]) -> Optional[str]:
         if model_name.startswith("openai:"):
             return api_keys.get("OPENAI_API_KEY")
-        elif model_name.startswith("anthropic:"):
+        if model_name.startswith("anthropic:"):
             return api_keys.get("ANTHROPIC_API_KEY")
-        elif model_name.startswith("google"):
+        if model_name.startswith("google"):
             return api_keys.get("GOOGLE_API_KEY")
+        return None
+
+    if should_get_from_config.lower() == "true":
+        # Accept either flat config fields or provider maps for runtime overrides.
+        if model_name.startswith("openai:"):
+            if configurable.get("openai_api_key"):
+                return configurable.get("openai_api_key")
+        elif model_name.startswith("anthropic:"):
+            if configurable.get("anthropic_api_key"):
+                return configurable.get("anthropic_api_key")
+        elif model_name.startswith("google"):
+            if configurable.get("google_api_key"):
+                return configurable.get("google_api_key")
+
+        if configurable.get("api_key"):
+            return configurable.get("api_key")
+        if configurable.get("apiKey"):
+            return configurable.get("apiKey")
+
+        api_keys = configurable.get("apiKeys", {})
+        if api_keys:
+            return _provider_api_key(api_keys)
         return None
     else:
         if model_name.startswith("openai:"): 
@@ -974,6 +997,42 @@ def get_api_key_for_model(model_name: str, config: RunnableConfig):
         elif model_name.startswith("google"):
             return os.getenv("GOOGLE_API_KEY")
         return None
+
+def get_base_url_for_model(model_name: str, config: RunnableConfig):
+    """Get API base URL for a specific model from config or environment."""
+    model_name = (model_name or "").lower()
+    configurable = config.get("configurable", {}) if config else {}
+
+    if configurable.get("base_url"):
+        return configurable.get("base_url")
+    if configurable.get("baseUrl"):
+        return configurable.get("baseUrl")
+
+    if model_name.startswith("openai:"):
+        if configurable.get("openai_base_url"):
+            return configurable.get("openai_base_url")
+        base_urls = configurable.get("baseUrls", {})
+        if isinstance(base_urls, dict) and base_urls.get("OPENAI_BASE_URL"):
+            return base_urls.get("OPENAI_BASE_URL")
+        return os.getenv("OPENAI_BASE_URL")
+
+    if model_name.startswith("anthropic:"):
+        if configurable.get("anthropic_base_url"):
+            return configurable.get("anthropic_base_url")
+        base_urls = configurable.get("baseUrls", {})
+        if isinstance(base_urls, dict) and base_urls.get("ANTHROPIC_BASE_URL"):
+            return base_urls.get("ANTHROPIC_BASE_URL")
+        return os.getenv("ANTHROPIC_BASE_URL")
+
+    if model_name.startswith("google"):
+        if configurable.get("google_base_url"):
+            return configurable.get("google_base_url")
+        base_urls = configurable.get("baseUrls", {})
+        if isinstance(base_urls, dict) and base_urls.get("GOOGLE_BASE_URL"):
+            return base_urls.get("GOOGLE_BASE_URL")
+        return os.getenv("GOOGLE_BASE_URL")
+
+    return None
 
 def get_tavily_api_key(config: RunnableConfig):
     """Get Tavily API key from environment or config."""

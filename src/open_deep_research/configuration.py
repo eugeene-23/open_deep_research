@@ -220,6 +220,36 @@ class Configuration(BaseModel):
             }
         }
     )
+    openai_base_url: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "text",
+                "description": "Optional: Override OpenAI-compatible API base URL for model calls."
+            }
+        },
+    )
+    anthropic_base_url: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "text",
+                "description": "Optional: Override Anthropic API base URL for model calls."
+            }
+        },
+    )
+    google_base_url: Optional[str] = Field(
+        default=None,
+        optional=True,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "text",
+                "description": "Optional: Override Google API base URL for model calls."
+            }
+        },
+    )
     # MCP server configuration
     mcp_config: Optional[MCPConfig] = Field(
         default=None,
@@ -251,7 +281,12 @@ class Configuration(BaseModel):
         configurable = config.get("configurable", {}) if config else {}
         field_names = list(cls.model_fields.keys())
         values: dict[str, Any] = {
-            field_name: os.environ.get(field_name.upper(), configurable.get(field_name))
+            # Runtime overrides should take precedence over environment defaults.
+            field_name: (
+                configurable.get(field_name)
+                if configurable.get(field_name) is not None
+                else os.environ.get(field_name.upper())
+            )
             for field_name in field_names
         }
         return cls(**{k: v for k, v in values.items() if v is not None})

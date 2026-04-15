@@ -1,0 +1,14 @@
+.git
+.venv
+.pytest_cache
+.langgraph_api
+__pycache__
+*.pyc
+.DS_Store
+*.log
+open_deep_research.egg-info
+tests/expt_results
+tests/.langsmith
+*.sqlite
+.env
+examples

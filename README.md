@@ -69,6 +69,11 @@ Open Deep Research supports a wide range of LLM providers via the [init_chat_mod
 - **Final Report Model** (default: `openai:gpt-4.1`): Write the final report
 
 > Note: the selected model will need to support [structured outputs](https://python.langchain.com/docs/integrations/chat/) and [tool calling](https://python.langchain.com/docs/how_to/tool_calling/).
+>
+> Runtime overrides via LangGraph `configurable` are supported:
+> - `*_model` fields (for model selection)
+> - `openai_base_url` / `anthropic_base_url` / `google_base_url` (or generic `base_url` / `baseUrl`)
+> - API keys from `configurable` when `GET_API_KEYS_FROM_CONFIG=true` (supports `apiKeys`, `api_key`, and `apiKey`)
 
 > Note: For OpenRouter: Follow [this guide](https://github.com/langchain-ai/open_deep_research/issues/75#issuecomment-2811472408) and for local models via Ollama  see [setup instructions](https://github.com/langchain-ai/open_deep_research/issues/65#issuecomment-2743586318).
 
