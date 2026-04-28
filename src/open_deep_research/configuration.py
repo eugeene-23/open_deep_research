@@ -271,6 +271,10 @@ class Configuration(BaseModel):
             }
         }
     )
+    model_provider: Optional[str] = Field(
+        default="openai",
+        optional=True
+    )
 
 
     @classmethod

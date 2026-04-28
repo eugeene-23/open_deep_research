@@ -55,7 +55,7 @@ from open_deep_research.utils import (
 
 # Initialize a configurable model that we will use throughout the agent
 configurable_model = init_chat_model(
-    configurable_fields=("model", "max_tokens", "api_key", "base_url"),
+    configurable_fields=("model", "model_provider", "max_tokens", "api_key", "base_url"),
 )
 
 async def clarify_with_user(state: AgentState, config: RunnableConfig) -> Command[Literal["write_research_brief", "__end__"]]:
@@ -86,7 +86,6 @@ async def clarify_with_user(state: AgentState, config: RunnableConfig) -> Comman
         "base_url": get_base_url_for_model(configurable.research_model, config),
         "tags": ["langsmith:nostream"]
     }
-    
     # Configure model with structured output and retry logic
     structured_output_kwargs = {}
     if configurable.research_model.lower().startswith("openai:"):
@@ -136,6 +135,7 @@ async def write_research_brief(state: AgentState, config: RunnableConfig) -> Com
     """
     # Step 1: Set up the research model for structured output
     configurable = Configuration.from_runnable_config(config)
+    print("================>" + str(configurable))
     research_model_config = {
         "model": configurable.research_model,
         "max_tokens": configurable.research_model_max_tokens,
